@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# Webhook và Token của bạn
+WEBHOOK_URL="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
+TOKEN="pt70EXJbPWH+"
+
+# Dọn dẹp session cũ
+pkill -9 ssh
+pkill -9 pinggy
+tmux kill-session -t mctunnel 2>/dev/null
+
+if [ -z "$TMUX" ]; then
+    tmux new-session -d -s mctunnel "/bin/bash $0"
+    echo "🚀 Geyser đã sẵn sàng! Đang mở Tunnel..."
+    exit
+fi
+
+while true
+do
+    pkill -9 ssh
+    sleep 5
+    rm -f dual_log.txt
+
+    # Mở tunnel cho cả Java và Bedrock
+    ssh -p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=10 "${TOKEN}tcp+udp@ap.free.pinggy.io" -R0:0.0.0.0:25565 > dual_log.txt 2>&1 &
+    
+    sleep 15
+
+    # --- BỘ LỌC THÔNG MINH: CHỐNG NHẦM LẪN ---
+    # Tìm địa chỉ có đuôi .pinggy. và XÓA SẠCH tiền tố tcp:// hoặc udp://
+    CLEAN_IP=$(grep -oE "(tcp:\/\/|udp:\/\/|)[a-zA-Z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" dual_log.txt | head -n 1 | sed 's/tcp:\/\///g' | sed 's/udp:\/\///g')
+
+    if [ -z "$CLEAN_IP" ]; then
+        echo "⚠️ Đang đợi Pinggy cấp IP..."
+        sleep 20
+        continue
+    else
+        # Tách IP và Port chuẩn cho Bedrock từ địa chỉ đã làm sạch
+        IP_ONLY=$(echo "$CLEAN_IP" | cut -d':' -f1)
+        PORT_ONLY=$(echo "$CLEAN_IP" | cut -d':' -f2)
+
+        PAYLOAD=$(cat <<EOF
+{
+  "embeds": [{
+    "title": "✅ SERVER MINECRAFT ĐÃ MỞ",
+    "description": "Geyser đã chạy trên port 25565. Kết nối ổn định!",
+    "color": 3066993,
+    "fields": [
+      { "name": "🖥️ JAVA ADDRESS", "value": "\`$CLEAN_IP\`" },
+      { "name": "📱 BEDROCK IP", "value": "\`$IP_ONLY\`", "inline": true },
+      { "name": "🔢 PORT", "value": "\`$PORT_ONLY\`", "inline": true }
+    ],
+    "footer": { "text": "Hệ thống tự reset sau mỗi 60 phút" }
+  }]
+}
+EOF
+)
+        curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" $WEBHOOK_URL
+        echo "✅ Đã gửi IP sạch lên Discord: $CLEAN_IP"
+        sleep 3600
+    fi
+done
