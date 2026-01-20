@@ -1,24 +1,52 @@
-cat << 'EOF' > start
 #!/bin/bash
-WEBHOOK="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
+WEBHOOK_URL="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
+TOKEN="pt70EXJbPWH+"
 
-pkill -9 ssh
-rm -f mc.log
-
-# Chạy lệnh bạn cần (dùng SSH để tránh bị VPS kill)
-ssh -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+tcp@ap.free.pinggy.io > mc.log 2>&1 &
-ssh -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+udp@ap.free.pinggy.io >> mc.log 2>&1 &
-
-sleep 10
-IPS=$(grep -oE "[a-zA-Z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" mc.log | sort | uniq)
-
-if [ -z "$IPS" ]; then
-    echo "❌ Không lấy được IP. Thử lại sau vài giây."
-else
-    curl -X POST -H "Content-Type: application/json" -d "{\"content\": \"🚀 **IP MC MỚI:**\n$IPS\"}" "$WEBHOOK"
-    echo "✅ Đã gửi Discord!"
+if [ -z "$TMUX" ]; then
+    tmux has-session -t mctunnel 2>/dev/null || tmux new-session -d -s mctunnel "/bin/bash $0"
+    exit
 fi
-EOF
 
-chmod +x start
-./start
+while true
+do
+    pkill -9 pinggy
+    pkill -9 ssh
+    sleep 5
+    rm -f dual_log.txt
+
+    # Khởi chạy qua SSH để dẹp lỗi TUI
+    ssh -p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R0:0.0.0.0:25565 ${TOKEN}tcp+udp@ap.free.pinggy.io > dual_log.txt 2>&1 &
+    
+    sleep 15
+
+    # Lọc lấy IP sạch nhất, loại bỏ mọi tiền tố tcp:// hoặc udp://
+    RAW_LINK=$(grep -oE "[a-zA-Z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" dual_log.txt | head -n 1)
+
+    if [ -z "$RAW_LINK" ]; then
+        sleep 20
+        continue
+    fi
+
+    # Tách IP và Port chuẩn cho Bedrock
+    IP_ONLY=$(echo $RAW_LINK | cut -d':' -f1)
+    PORT_ONLY=$(echo $RAW_LINK | cut -d':' -f2)
+
+    PAYLOAD=$(cat <<EOF
+{
+  "embeds": [{
+    "title": "🎮 SERVER MINECRAFT ONLINE",
+    "color": 3066993,
+    "fields": [
+      { "name": "🖥️ JAVA (PC)", "value": "\`$RAW_LINK\`" },
+      { "name": "📱 BEDROCK IP", "value": "\`$IP_ONLY\`", "inline": true },
+      { "name": "🔢 PORT", "value": "\`$PORT_ONLY\`", "inline": true }
+    ],
+    "footer": { "text": "Lưu ý: Geyser phải chạy trên port 25565" }
+  }]
+}
+EOF
+)
+    curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" $WEBHOOK_URL
+    echo "✅ Đã gửi IP chuẩn: $RAW_LINK"
+    sleep 3600
+done
