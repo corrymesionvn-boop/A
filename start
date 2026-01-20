@@ -2,26 +2,34 @@ cat << 'EOF' > start.sh
 #!/bin/bash
 WEBHOOK="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
 
-# 1. Dọn dẹp tiến trình cũ nếu có
+# 1. Tắt hết Pinggy cũ
 pkill -9 pinggy > /dev/null 2>&1
+rm -f java.log bedrock.log
 
-# 2. Chạy 2 lệnh bạn cần (đẩy vào file tạm để lấy link)
+# 2. Chạy lệnh
 ./pinggy -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+tcp@ap.free.pinggy.io > java.log 2>&1 &
 ./pinggy -p 443 -R0:127.0.0.1:25565 pt70EXJbPWH+udp@ap.free.pinggy.io > bedrock.log 2>&1 &
 
-echo "⏳ Đang lấy IP... Đợi 8 giây..."
-sleep 8
+echo "⏳ Đang đợi Pinggy cấp IP (có thể mất tới 20 giây)..."
 
-# 3. Lọc link chuẩn (bỏ qua các ký tự lạ của terminal)
-JAVA_URL=$(grep -oE "[a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" java.log | head -n 1)
-BEDROCK_URL=$(grep -oE "[a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" bedrock.log | head -n 1)
+# 3. Vòng lặp đợi Java IP
+for i in {1..20}; do
+    JAVA_URL=$(grep -oE "[a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" java.log | head -n 1)
+    if [ ! -z "$JAVA_URL" ]; then break; fi
+    sleep 2
+done
 
-# 4. Gửi Discord (Chỉ gửi nếu lấy được link)
-if [ -z "$JAVA_URL" ] && [ -z "$BEDROCK_URL" ]; then
-    echo "❌ Lỗi: Không lấy được IP từ Pinggy. Thử chạy lại lệnh cat java.log để xem lỗi."
-else
+# 4. Vòng lặp đợi Bedrock IP
+for i in {1..10}; do
+    BEDROCK_URL=$(grep -oE "[a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" bedrock.log | head -n 1)
+    if [ ! -z "$BEDROCK_URL" ]; then break; fi
+    sleep 1
+done
+
+# 5. Gửi Discord
+if [ ! -z "$JAVA_URL" ]; then
     curl -X POST -H "Content-Type: application/json" -d "{
-      \"content\": \"🚀 **SERVER MINECRAFT ĐÃ SẴN SÀNG!**\",
+      \"content\": \"🚀 **MINECRAFT ONLINE!**\",
       \"embeds\": [{
         \"color\": 65280,
         \"fields\": [
@@ -29,31 +37,12 @@ else
           { \"name\": \"📱 Bedrock IP\", \"value\": \"\`$BEDROCK_URL\`\" }
         ]
       }]
-    }" $WEBHOOK
-    echo "✅ Đã gửi IP lên Discord!"
+    }" "$WEBHOOK"
+    echo "✅ Đã gửi Discord: $JAVA_URL"
+else
+    echo "❌ Quá thời gian mà vẫn chưa lấy được IP. Bạn thử gõ 'cat java.log' xem nó báo lỗi gì nhé."
 fi
 EOF
 
 chmod +x start.sh
 ./start.sh
-./run_mc.sh
-# --- GỬI DISCORD ---
-PAYLOAD=$(cat <<EOF
-{
-  "embeds": [{
-    "title": "🎮 SERVER MINECRAFT ASIA ONLINE",
-    "description": "Server đang chạy ổn định trên server Châu Á (Ping thấp)",
-    "color": 65280,
-    "fields": [
-      { "name": "🖥️ JAVA EDITION", "value": "\`$JAVA_IP\`" },
-      { "name": "📱 BEDROCK IP", "value": "\`$B_IP\`", "inline": true },
-      { "name": "🔢 PORT", "value": "\`$B_PORT\`", "inline": true }
-    ],
-    "footer": { "text": "Cung cấp bởi Pinggy Asia Tunnel" }
-  }]
-}
-EOF
-)
-
-curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" $WEBHOOK_URL
-echo "✅ Đã gửi thông tin IP lên Discord thành công!"
