@@ -2,30 +2,21 @@ cat << 'EOF' > start
 #!/bin/bash
 WEBHOOK="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
 
-# 1. Dọn dẹp
-pkill -9 pinggy > /dev/null 2>&1
-rm -f java.log bedrock.log
-chmod +x ./pinggy
+pkill -9 ssh
+rm -f mc.log
 
-# 2. Chạy 2 lệnh (Dùng đường dẫn hiện tại rõ ràng)
-nohup ./pinggy -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+tcp@ap.free.pinggy.io > java.log 2>&1 &
-nohup ./pinggy -p 443 -R0:127.0.0.1:25565 pt70EXJbPWH+udp@ap.free.pinggy.io > bedrock.log 2>&1 &
+# Chạy lệnh bạn cần (dùng SSH để tránh bị VPS kill)
+ssh -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+tcp@ap.free.pinggy.io > mc.log 2>&1 &
+ssh -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+udp@ap.free.pinggy.io >> mc.log 2>&1 &
 
-echo "⏳ Đang kết nối Pinggy... (12 giây)"
-sleep 12
+sleep 10
+IPS=$(grep -oE "[a-zA-Z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" mc.log | sort | uniq)
 
-# 3. Lọc IP (Dùng regex mạnh hơn để tránh ký tự rác)
-JAVA_URL=$(grep -oE "[a-zA-Z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" java.log | head -n 1)
-BEDROCK_URL=$(grep -oE "[a-zA-Z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" bedrock.log | head -n 1)
-
-# 4. Kiểm tra và gửi Discord
-if [ -n "$JAVA_URL" ]; then
-    curl -X POST -H "Content-Type: application/json" -d "{\"content\": \"🚀 **SERVER ONLINE**\n🖥️ Java: \`$JAVA_URL\`\n📱 Bedrock: \`$BEDROCK_URL\`\"}" "$WEBHOOK"
-    echo "✅ Xong! Check Discord nhé."
+if [ -z "$IPS" ]; then
+    echo "❌ Không lấy được IP. Thử lại sau vài giây."
 else
-    echo "❌ Vẫn bị lỗi Killed hoặc không có IP."
-    echo "--- NỘI DUNG LOG JAVA ---"
-    cat java.log
+    curl -X POST -H "Content-Type: application/json" -d "{\"content\": \"🚀 **IP MC MỚI:**\n$IPS\"}" "$WEBHOOK"
+    echo "✅ Đã gửi Discord!"
 fi
 EOF
 
