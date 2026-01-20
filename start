@@ -1,100 +1,60 @@
 #!/bin/bash
 
-# Thông tin cấu hình
 WEBHOOK_URL="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
 TOKEN="pt70EXJbPWH+"
 
-# --- BƯỚC 1: DỌN DẸP SẠCH SẼ ---
-pkill -9 ssh
-pkill -9 pinggy
+# --- SỬA PHẦN DỌN DẸP ĐỂ TRÁNH BỊ KILLED ---
+# Chỉ giết các tiến trình ssh có liên quan đến pinggy, không giết toàn bộ ssh
+ps aux | grep "${TOKEN}" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null
+pkill -9 pinggy 2>/dev/null
+
 tmux kill-session -t mctunnel 2>/dev/null
 
-# Khởi tạo tmux nếu chưa có
 if [ -z "$TMUX" ]; then
     tmux new-session -d -s mctunnel "/bin/bash $0"
-    echo "🚀 Đang khởi chạy hệ thống (Đã fix lỗi log trống)..."
+    echo "🚀 Đang khởi chạy lại (Đã fix lỗi bị Killed)..."
     exit
 fi
 
 while true
 do
-    echo "[$(date)] --- ĐANG KẾT NỐI ---"
-    pkill -9 ssh
+    pkill -9 pinggy 2>/dev/null
     sleep 5
     rm -f dual_log.txt
 
-    # --- BƯỚC 2: KẾT NỐI VỚI CHẾ ĐỘ TỰ CHẤP NHẬN FINGERPRINT ---
-    # Thêm -o StrictHostKeyChecking=accept-new để không bao giờ bị kẹt
-    ssh -p 443 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=10 "${TOKEN}tcp+udp@ap.free.pinggy.io" -R0:0.0.0.0:25565 > dual_log.txt 2>&1 &
+    # Chạy SSH với các tùy chọn tiết kiệm tài nguyên
+    ssh -p 443 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=10 -o ServerAliveCountMax=3 "${TOKEN}tcp+udp@ap.free.pinggy.io" -R0:0.0.0.0:25565 > dual_log.txt 2>&1 &
     
-    echo "⏳ Đợi 30 giây để Pinggy cấp IP (Tăng thời gian để tránh log trống)..."
-    sleep 30
+    echo "Đang đợi IP..."
+    sleep 20
 
-    # --- BƯỚC 3: LỌC IP SIÊU SẠCH ---
-    # Tìm dòng có địa chỉ .pinggy.
+    # Kiểm tra xem có lấy được link không
     RAW_LINE=$(grep -oE "(tcp:\/\/|udp:\/\/|)[a-zA-Z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" dual_log.txt | head -n 1)
 
     if [ -z "$RAW_LINE" ]; then
-        echo "⚠️ Log vẫn trống hoặc chưa có IP. Đang thử lại sau 20s..."
-        # Kiểm tra nội dung log thực tế để debug
-        cat dual_log.txt
-        sleep 20
+        echo "⚠️ Vẫn chưa có IP. Thử lại sau 15s..."
+        sleep 15
         continue
     else
-        # Xóa sạch tcp:// và udp:// để Bedrock/Java không bị lỗi
         CLEAN_IP=$(echo "$RAW_LINE" | sed 's/tcp:\/\///g' | sed 's/udp:\/\///g')
-
-        # Tách IP và Port chuẩn cho Bedrock
-        IP_ONLY=$(echo "$CLEAN_IP" | cut -d':' -f1)
-        PORT_ONLY=$(echo "$CLEAN_IP" | cut -d':' -f2)
-
-        # Gửi Discord
-        PAYLOAD=$(cat <<EOF
-{
-  "embeds": [{
-    "title": "✅ SERVER ONLINE (FIXED)",
-    "description": "Đã sửa lỗi xác thực SSH và lọc sạch IP.",
-    "color": 65280,
-    "fields": [
-      { "name": "🖥️ JAVA ADDRESS", "value": "\`$CLEAN_IP\`" },
-      { "name": "📱 BEDROCK IP", "value": "\`$IP_ONLY\`", "inline": true },
-      { "name": "🔢 PORT", "value": "\`$PORT_ONLY\`", "inline": true }
-    ],
-    "footer": { "text": "Nếu Bedrock không vào được, hãy kiểm tra Geyser port 25565" }
-  }]
-}
-EOF
-)
-        curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" $WEBHOOK_URL
-        echo "✅ Thành công! Đã gửi IP: $CLEAN_IP"
-        
-        # Treo 60 phút rồi reset
-        sleep 3600
-    fi
-done
-    else
-        # Tách IP và Port chuẩn cho Bedrock từ địa chỉ đã làm sạch
         IP_ONLY=$(echo "$CLEAN_IP" | cut -d':' -f1)
         PORT_ONLY=$(echo "$CLEAN_IP" | cut -d':' -f2)
 
         PAYLOAD=$(cat <<EOF
 {
   "embeds": [{
-    "title": "✅ SERVER MINECRAFT ĐÃ MỞ",
-    "description": "Geyser đã chạy trên port 25565. Kết nối ổn định!",
+    "title": "✅ SERVER MINECRAFT ONLINE",
     "color": 3066993,
     "fields": [
-      { "name": "🖥️ JAVA ADDRESS", "value": "\`$CLEAN_IP\`" },
-      { "name": "📱 BEDROCK IP", "value": "\`$IP_ONLY\`", "inline": true },
-      { "name": "🔢 PORT", "value": "\`$PORT_ONLY\`", "inline": true }
-    ],
-    "footer": { "text": "Hệ thống tự reset sau mỗi 60 phút" }
+      { "name": "🖥️ JAVA", "value": "\`$CLEAN_IP\`" },
+      { "name": "📱 BEDROCK", "value": "IP: \`$IP_ONLY\`\nPort: \`$PORT_ONLY\`" }
+    ]
   }]
 }
 EOF
 )
         curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" $WEBHOOK_URL
-        echo "✅ Đã gửi IP sạch lên Discord: $CLEAN_IP"
+        echo "✅ Đã gửi IP lên Discord."
         sleep 3600
     fi
 done
