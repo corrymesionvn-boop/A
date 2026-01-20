@@ -1,52 +1,21 @@
+cat << 'EOF' > start
 #!/bin/bash
-WEBHOOK_URL="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
-TOKEN="pt70EXJbPWH+"
+WEBHOOK="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
 
-if [ -z "$TMUX" ]; then
-    tmux has-session -t mctunnel 2>/dev/null || tmux new-session -d -s mctunnel "/bin/bash $0"
-    exit
-fi
+# Dọn dẹp các tiến trình cũ
+pkill -9 ssh
+pkill -9 pinggy
 
-while true
-do
-    pkill -9 pinggy
-    pkill -9 ssh
-    sleep 5
-    rm -f dual_log.txt
+# Chạy 2 lệnh chính (Bỏ lưu log phức tạp để tránh bị IDX soi)
+ssh -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+tcp@ap.free.pinggy.io > /dev/null 2>&1 &
+ssh -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+udp@ap.free.pinggy.io > /dev/null 2>&1 &
 
-    # Khởi chạy qua SSH để dẹp lỗi TUI
-    ssh -p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R0:0.0.0.0:25565 ${TOKEN}tcp+udp@ap.free.pinggy.io > dual_log.txt 2>&1 &
-    
-    sleep 15
+# Gửi thông báo nhanh lên Discord
+curl -X POST -H "Content-Type: application/json" -d "{\"content\": \"🚀 **Server Minecraft đã được kích hoạt!**\n(Vào trang chủ Pinggy để lấy IP hoặc xem trực tiếp trên Terminal)\"}" "$WEBHOOK"
 
-    # Lọc lấy IP sạch nhất, loại bỏ mọi tiền tố tcp:// hoặc udp://
-    RAW_LINK=$(grep -oE "[a-zA-Z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" dual_log.txt | head -n 1)
-
-    if [ -z "$RAW_LINK" ]; then
-        sleep 20
-        continue
-    fi
-
-    # Tách IP và Port chuẩn cho Bedrock
-    IP_ONLY=$(echo $RAW_LINK | cut -d':' -f1)
-    PORT_ONLY=$(echo $RAW_LINK | cut -d':' -f2)
-
-    PAYLOAD=$(cat <<EOF
-{
-  "embeds": [{
-    "title": "🎮 SERVER MINECRAFT ONLINE",
-    "color": 3066993,
-    "fields": [
-      { "name": "🖥️ JAVA (PC)", "value": "\`$RAW_LINK\`" },
-      { "name": "📱 BEDROCK IP", "value": "\`$IP_ONLY\`", "inline": true },
-      { "name": "🔢 PORT", "value": "\`$PORT_ONLY\`", "inline": true }
-    ],
-    "footer": { "text": "Lưu ý: Geyser phải chạy trên port 25565" }
-  }]
-}
+echo "✅ Đã kích hoạt 2 lệnh chạy ngầm."
+echo "👉 Bạn có thể gõ 'ps aux | grep ssh' để kiểm tra xem nó còn sống không."
 EOF
-)
-    curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" $WEBHOOK_URL
-    echo "✅ Đã gửi IP chuẩn: $RAW_LINK"
-    sleep 3600
-done
+
+chmod +x start
+./start
