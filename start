@@ -1,48 +1,33 @@
-cat << 'EOF' > start.sh
+cat << 'EOF' > start
 #!/bin/bash
 WEBHOOK="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
 
-# 1. Tắt hết Pinggy cũ
+# 1. Dọn dẹp
 pkill -9 pinggy > /dev/null 2>&1
 rm -f java.log bedrock.log
+chmod +x ./pinggy
 
-# 2. Chạy lệnh
-./pinggy -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+tcp@ap.free.pinggy.io > java.log 2>&1 &
-./pinggy -p 443 -R0:127.0.0.1:25565 pt70EXJbPWH+udp@ap.free.pinggy.io > bedrock.log 2>&1 &
+# 2. Chạy 2 lệnh (Dùng đường dẫn hiện tại rõ ràng)
+nohup ./pinggy -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+tcp@ap.free.pinggy.io > java.log 2>&1 &
+nohup ./pinggy -p 443 -R0:127.0.0.1:25565 pt70EXJbPWH+udp@ap.free.pinggy.io > bedrock.log 2>&1 &
 
-echo "⏳ Đang đợi Pinggy cấp IP (có thể mất tới 20 giây)..."
+echo "⏳ Đang kết nối Pinggy... (12 giây)"
+sleep 12
 
-# 3. Vòng lặp đợi Java IP
-for i in {1..20}; do
-    JAVA_URL=$(grep -oE "[a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" java.log | head -n 1)
-    if [ ! -z "$JAVA_URL" ]; then break; fi
-    sleep 2
-done
+# 3. Lọc IP (Dùng regex mạnh hơn để tránh ký tự rác)
+JAVA_URL=$(grep -oE "[a-zA-Z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" java.log | head -n 1)
+BEDROCK_URL=$(grep -oE "[a-zA-Z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" bedrock.log | head -n 1)
 
-# 4. Vòng lặp đợi Bedrock IP
-for i in {1..10}; do
-    BEDROCK_URL=$(grep -oE "[a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" bedrock.log | head -n 1)
-    if [ ! -z "$BEDROCK_URL" ]; then break; fi
-    sleep 1
-done
-
-# 5. Gửi Discord
-if [ ! -z "$JAVA_URL" ]; then
-    curl -X POST -H "Content-Type: application/json" -d "{
-      \"content\": \"🚀 **MINECRAFT ONLINE!**\",
-      \"embeds\": [{
-        \"color\": 65280,
-        \"fields\": [
-          { \"name\": \"🖥️ Java IP\", \"value\": \"\`$JAVA_URL\`\" },
-          { \"name\": \"📱 Bedrock IP\", \"value\": \"\`$BEDROCK_URL\`\" }
-        ]
-      }]
-    }" "$WEBHOOK"
-    echo "✅ Đã gửi Discord: $JAVA_URL"
+# 4. Kiểm tra và gửi Discord
+if [ -n "$JAVA_URL" ]; then
+    curl -X POST -H "Content-Type: application/json" -d "{\"content\": \"🚀 **SERVER ONLINE**\n🖥️ Java: \`$JAVA_URL\`\n📱 Bedrock: \`$BEDROCK_URL\`\"}" "$WEBHOOK"
+    echo "✅ Xong! Check Discord nhé."
 else
-    echo "❌ Quá thời gian mà vẫn chưa lấy được IP. Bạn thử gõ 'cat java.log' xem nó báo lỗi gì nhé."
+    echo "❌ Vẫn bị lỗi Killed hoặc không có IP."
+    echo "--- NỘI DUNG LOG JAVA ---"
+    cat java.log
 fi
 EOF
 
-chmod +x start.sh
-./start.sh
+chmod +x start
+./start
