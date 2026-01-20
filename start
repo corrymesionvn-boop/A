@@ -1,39 +1,63 @@
 #!/bin/bash
 
+# Thông tin của bạn
 WEBHOOK_URL="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
 TOKEN="pt70EXJbPWH+"
 
-# --- SỬA PHẦN DỌN DẸP ĐỂ TRÁNH BỊ KILLED ---
-# Chỉ giết các tiến trình ssh có liên quan đến pinggy, không giết toàn bộ ssh
+# Dọn dẹp nhẹ nhàng (Chỉ giết pinggy liên quan đến token này)
 ps aux | grep "${TOKEN}" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null
-pkill -9 pinggy 2>/dev/null
-
 tmux kill-session -t mctunnel 2>/dev/null
 
 if [ -z "$TMUX" ]; then
     tmux new-session -d -s mctunnel "/bin/bash $0"
-    echo "🚀 Đang khởi chạy lại (Đã fix lỗi bị Killed)..."
+    echo "🚀 Đang khởi chạy Tunnel Minecraft... Kiểm tra Discord sau 30s."
     exit
 fi
 
 while true
 do
-    pkill -9 pinggy 2>/dev/null
-    sleep 5
-    rm -f dual_log.txt
-
-    # Chạy SSH với các tùy chọn tiết kiệm tài nguyên
-    ssh -p 443 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=10 -o ServerAliveCountMax=3 "${TOKEN}tcp+udp@ap.free.pinggy.io" -R0:0.0.0.0:25565 > dual_log.txt 2>&1 &
+    rm -f mc_log.txt
+    # Sử dụng lệnh SSH hệ thống (Nhẹ hơn file ./pinggy rất nhiều)
+    ssh -p 443 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=10 "${TOKEN}tcp+udp@ap.free.pinggy.io" -R0:localhost:25565 > mc_log.txt 2>&1 &
     
-    echo "Đang đợi IP..."
-    sleep 20
+    sleep 30
 
-    # Kiểm tra xem có lấy được link không
-    RAW_LINE=$(grep -oE "(tcp:\/\/|udp:\/\/|)[a-zA-Z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" dual_log.txt | head -n 1)
+    # Lọc lấy link sạch từ log
+    RAW_LINE=$(grep -oE "(tcp:\/\/|udp:\/\/|)[a-zA-Z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" mc_log.txt | head -n 1)
 
     if [ -z "$RAW_LINE" ]; then
-        echo "⚠️ Vẫn chưa có IP. Thử lại sau 15s..."
-        sleep 15
+        echo "⚠️ Chưa lấy được IP, đang thử lại..."
+        sleep 20
+        continue
+    else
+        # Làm sạch IP cho Bedrock
+        CLEAN_IP=$(echo "$RAW_LINE" | sed 's/tcp:\/\///g' | sed 's/udp:\/\///g')
+        IP_ONLY=$(echo "$CLEAN_IP" | cut -d':' -f1)
+        PORT_ONLY=$(echo "$CLEAN_IP" | cut -d':' -f2)
+
+        PAYLOAD=$(cat <<EOF
+{
+  "embeds": [{
+    "title": "🎮 SERVER MINECRAFT ONLINE",
+    "description": "Server đã sẵn sàng! Chúc các bạn chơi game vui vẻ.",
+    "color": 3066993,
+    "fields": [
+      { "name": "🖥️ JAVA PC", "value": "\`$CLEAN_IP\`" },
+      { "name": "📱 BEDROCK (PE)", "value": "IP: \`$IP_ONLY\`\nPort: \`$PORT_ONLY\`" }
+    ],
+    "footer": { "text": "Hệ thống tự động reset sau 60 phút để giữ ổn định" },
+    "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  }]
+}
+EOF
+)
+        curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" $WEBHOOK_URL
+        echo "✅ Đã gửi IP lên Discord: $CLEAN_IP"
+        
+        # Đợi 1 tiếng rồi mới reset tunnel
+        sleep 3600
+    fi
+done
         continue
     else
         CLEAN_IP=$(echo "$RAW_LINE" | sed 's/tcp:\/\///g' | sed 's/udp:\/\///g')
