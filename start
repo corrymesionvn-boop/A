@@ -1,39 +1,41 @@
-cat << 'EOF' > run_mc.sh
+cat << 'EOF' > start.sh
 #!/bin/bash
-
 WEBHOOK="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUtGXA9z-VpWwcQzZz7M7meSapdb8i7f0cZ_XdnOg4EHeCQ6x4rfmga_2"
 
-# 1. Chạy Java & Bedrock ngầm
+# 1. Dọn dẹp tiến trình cũ nếu có
+pkill -9 pinggy > /dev/null 2>&1
+
+# 2. Chạy 2 lệnh bạn cần (đẩy vào file tạm để lấy link)
 ./pinggy -p 443 -R0:127.0.0.1:25565 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 pt70EXJbPWH+tcp@ap.free.pinggy.io > java.log 2>&1 &
 ./pinggy -p 443 -R0:127.0.0.1:25565 pt70EXJbPWH+udp@ap.free.pinggy.io > bedrock.log 2>&1 &
 
-echo "⌛ Đang lấy IP và gửi Discord..."
-sleep 10
+echo "⏳ Đang lấy IP... Đợi 8 giây..."
+sleep 8
 
-# 2. Lọc IP từ log
-JAVA_IP=$(grep -oE "([a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+)" java.log | head -n 1)
-BEDROCK_RAW=$(grep -oE "([a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+)" bedrock.log | head -n 1)
+# 3. Lọc link chuẩn (bỏ qua các ký tự lạ của terminal)
+JAVA_URL=$(grep -oE "[a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" java.log | head -n 1)
+BEDROCK_URL=$(grep -oE "[a-z0-9.-]+\.a\.free\.pinggy\.link:[0-9]+" bedrock.log | head -n 1)
 
-B_IP=$(echo $BEDROCK_RAW | cut -d':' -f1)
-B_PORT=$(echo $BEDROCK_RAW | cut -d':' -f2)
-
-# 3. Gửi lên Discord
-curl -X POST -H "Content-Type: application/json" -d "{
-  \"content\": \"🎮 **SERVER MINECRAFT ONLINE!**\",
-  \"embeds\": [{
-    \"fields\": [
-      { \"name\": \"🖥️ Java IP\", \"value\": \"\`$JAVA_IP\`\" },
-      { \"name\": \"📱 Bedrock IP\", \"value\": \"\`$B_IP\`\", \"inline\": true },
-      { \"name\": \"🔢 Port\", \"value\": \"\`$B_PORT\`\", \"inline\": true }
-    ],
-    \"color\": 5814783
-  }]
-}" $WEBHOOK
-
-echo "✅ Đã xong! Check Discord của bạn đi."
+# 4. Gửi Discord (Chỉ gửi nếu lấy được link)
+if [ -z "$JAVA_URL" ] && [ -z "$BEDROCK_URL" ]; then
+    echo "❌ Lỗi: Không lấy được IP từ Pinggy. Thử chạy lại lệnh cat java.log để xem lỗi."
+else
+    curl -X POST -H "Content-Type: application/json" -d "{
+      \"content\": \"🚀 **SERVER MINECRAFT ĐÃ SẴN SÀNG!**\",
+      \"embeds\": [{
+        \"color\": 65280,
+        \"fields\": [
+          { \"name\": \"🖥️ Java IP\", \"value\": \"\`$JAVA_URL\`\" },
+          { \"name\": \"📱 Bedrock IP\", \"value\": \"\`$BEDROCK_URL\`\" }
+        ]
+      }]
+    }" $WEBHOOK
+    echo "✅ Đã gửi IP lên Discord!"
+fi
 EOF
 
-chmod +x run_mc.sh
+chmod +x start.sh
+./start.sh
 ./run_mc.sh
 # --- GỬI DISCORD ---
 PAYLOAD=$(cat <<EOF
