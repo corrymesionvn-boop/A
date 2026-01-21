@@ -1,4 +1,4 @@
-cat << 'EOF' > start
+cat << 'EOF' > start.sh
 #!/bin/bash
 
 # --- CẤU HÌNH ---
