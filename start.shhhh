@@ -6,34 +6,64 @@ WEBHOOK_URL="https://discord.com/api/webhooks/1460633815578968239/E5Ck-CCpCwQNUt
 
 while true
 do
-    echo "--- BẮT ĐẦU CHU KỲ (RESET MỖI 60 PHÚT) ---"
+    echo "--- BẮT ĐẦU CHU KỲ MỚI ---"
     
     # 1. Dọn dẹp cũ
     pkill -9 -f pinggy
     rm -f java.log bedrock.log
     sleep 2
 
-    # 2. Khởi chạy (Đã bỏ --noupdate để tránh lỗi flag)
-    # Java
-    ./pinggy -p 443 -R0:localhost:25565 tcp@free.pinggy.io --no-tui > java.log 2>&1 &
-    # Bedrock
-    ./pinggy -p 443 -R0:localhost:25565 udp@free.pinggy.io --no-tui > bedrock.log 2>&1 &
+    # 2. Khởi chạy thuần túy (Không dùng bất kỳ flag nào ngoài lệnh gốc)
+    # Chúng ta dùng "stdbuf" để ép nó ghi dữ liệu vào log ngay lập tức
+    stdbuf -oL ./pinggy -p 443 -R0:localhost:25565 tcp@free.pinggy.io > java.log 2>&1 &
+    stdbuf -oL ./pinggy -p 443 -R0:localhost:25565 udp@free.pinggy.io > bedrock.log 2>&1 &
 
-    echo "Đang đợi Pinggy kết nối..."
+    echo "Đang đợi Pinggy thiết lập kết nối..."
     
-    # Vòng lặp chờ IP (check tối đa 60 giây)
+    # Vòng lặp chờ IP (kiểm tra mỗi 5 giây trong vòng 1 phút)
     JAVA_IP=""
     BEDROCK_RAW=""
     for i in {1..12}
     do
         sleep 5
+        # Tìm chuỗi IP trong log
         JAVA_IP=$(grep -oE "[a-z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" java.log | head -n 1)
         BEDROCK_RAW=$(grep -oE "[a-z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" bedrock.log | head -n 1)
         
         if [ -n "$JAVA_IP" ] && [ -n "$BEDROCK_RAW" ]; then
-            echo "✅ Đã tìm thấy IP sau $((i*5)) giây!"
+            echo "✅ Đã lấy được IP!"
             break
         fi
+        echo "⏳ Đang kết nối... ($((i*5))s)"
+    done
+
+    # 3. Gửi Webhook nếu thành công
+    if [ -n "$JAVA_IP" ] && [ -n "$BEDROCK_RAW" ]; then
+        B_HOST=$(echo $BEDROCK_RAW | cut -d':' -f1)
+        B_PORT=$(echo $BEDROCK_RAW | cut -d':' -f2)
+
+        curl -H "Content-Type: application/json" -X POST -d '{
+          "content": "✅ **MÁY CHỦ ĐÃ TRỰC TUYẾN!**",
+          "embeds": [{
+            "title": "🎮 THÔNG TIN MINECRAFT",
+            "color": 65280,
+            "fields": [
+              { "name": "☕ Java Edition", "value": "IP: `'"$JAVA_IP"'`" },
+              { "name": "📱 Bedrock Edition", "value": "IP: `'"$B_HOST"'` \nPort: `'"$B_PORT"'`" }
+            ],
+            "footer": { "text": "Hệ thống tự động reset sau 60 phút" }
+          }]
+        }' $WEBHOOK_URL
+        
+        echo "🚀 Đã xong! Chờ 60 phút..."
+        sleep 3600
+    else
+        echo "❌ Không lấy được IP. Nội dung log cuối cùng:"
+        tail -n 5 java.log
+        sleep 20
+    fi
+done
+EOF
         echo "⏳ Vẫn đang kết nối... ($((i*5))s)"
     done
 
