@@ -1,0 +1,17 @@
+[Unit]
+Description=Minecraft Pinggy Webhook Bot
+After=network.target
+
+[Service]
+# Đường dẫn đến thư mục chứa file start.sh (Ví dụ: /root/server)
+WorkingDirectory=/root
+# Lệnh thực thi script
+ExecStart=/bin/bash /root/start.sh
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=mc-bot
+
+[Install]
+WantedBy=multi-user.target
