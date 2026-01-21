@@ -8,50 +8,45 @@ while true
 do
     echo "--- BẮT ĐẦU CHU KỲ MỚI ($(date)) ---"
 
-    # 1. Dọn dẹp các tiến trình cũ
-    pkill -f pinggy
-    sleep 2
+    # 1. Dọn dẹp tiến trình cũ
+    pkill -9 -f pinggy
+    sleep 3
 
-    # 2. Chạy lệnh Java (TCP) - Cổng API 4300
-    ./pinggy -p 443 -R0:localhost:25565 tcp@free.pinggy.io > java_pinggy.log 2>&1 &
-    
-    # 3. Chạy lệnh Bedrock (UDP) - Cổng API 4301
-    ./pinggy -p 443 -R0:localhost:25565 udp@free.pinggy.io --web-debug-port 4301 > bedrock_pinggy.log 2>&1 &
+    # 2. Khởi động Pinggy (Thêm --no-tui để fix lỗi giao diện)
+    ./pinggy -p 443 -R0:localhost:25565 tcp@free.pinggy.io --noupdate --no-tui > java_pinggy.log 2>&1 &
+    ./pinggy -p 443 -R0:localhost:25565 udp@free.pinggy.io --web-debug-port 4301 --noupdate --no-tui > bedrock_pinggy.log 2>&1 &
 
-    echo "Đang đợi lấy dữ liệu từ Pinggy..."
-    sleep 15
+    echo "Đang đợi Pinggy kết nối..."
+    sleep 30
 
-    # 4. Lấy IP Java và Bedrock
-    JAVA_IP=$(curl -s http://localhost:4300/urls | grep -oE "[a-z0-9.-]+\.free\.pinggy\.io:[0-9]+")
-    BEDROCK_RAW=$(curl -s http://localhost:4301/urls | grep -oE "[a-z0-9.-]+\.free\.pinggy\.io:[0-9]+")
-    
+    # 3. Lấy IP (Hỗ trợ cả đuôi .io và .link)
+    JAVA_IP=$(curl -s http://localhost:4300/urls | grep -oE "[a-z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" | head -n 1)
+    BEDROCK_RAW=$(curl -s http://localhost:4301/urls | grep -oE "[a-z0-9.-]+\.free\.pinggy\.(io|link):[0-9]+" | head -n 1)
+
     if [ -n "$JAVA_IP" ] && [ -n "$BEDROCK_RAW" ]; then
         B_HOST=$(echo $BEDROCK_RAW | cut -d':' -f1)
         B_PORT=$(echo $BEDROCK_RAW | cut -d':' -f2)
 
-        # 5. Gửi Webhook báo THÀNH CÔNG
-        curl -H "Content-Type: application/json" \
-             -X POST \
-             -d '{
+        # 4. Gửi Webhook
+        curl -H "Content-Type: application/json" -X POST -d '{
           "content": "✅ **HỆ THỐNG ĐÃ KHỞI ĐỘNG THÀNH CÔNG!**",
           "embeds": [{
-            "title": "🎮 THÔNG TIN MÁY CHỦ MINECRAFT",
-            "description": "IP sẽ tự động thay đổi sau mỗi 60 phút để duy trì kết nối.",
+            "title": "🎮 MINECRAFT SERVER IP",
             "color": 65280,
             "fields": [
-              { "name": "☕ JAVA EDITION", "value": "IP: `'"$JAVA_IP"'`", "inline": false },
-              { "name": "📱 BEDROCK EDITION", "value": "IP: `'"$B_HOST"'` \nPort: `'"$B_PORT"'`", "inline": false }
+              { "name": "☕ Java Edition", "value": "IP: `'"$JAVA_IP"'`" },
+              { "name": "📱 Bedrock Edition", "value": "IP: `'"$B_HOST"'` \nPort: `'"$B_PORT"'`" }
             ],
-            "footer": { "text": "Trạng thái: Đang hoạt động ổn định" },
-            "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+            "footer": { "text": "Hệ thống tự động reset sau mỗi 60 phút" }
           }]
         }' $WEBHOOK_URL
-        echo "Thành công: Đã gửi IP lên Discord."
+        echo "✅ Thành công!"
     else
-        echo "Lỗi: Không lấy được IP."
+        echo "❌ Vẫn không lấy được IP. Thử lại sau 1 phút..."
+        sleep 60
+        continue
     fi
 
-    echo "Sẽ khởi động lại sau 60 phút..."
     sleep 3600
 done
 EOF
