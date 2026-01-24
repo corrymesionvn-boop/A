@@ -1,0 +1,19 @@
+cat <<EOF > ~/server/config.json
+{
+  "panel": {
+    "database": {
+      "type": "sqlite3",
+      "url": "file:pufferpanel.db?cache=shared&_fk=1"
+    },
+    "web": {
+      "host": "0.0.0.0:8080"
+    }
+  },
+  "daemon": {
+    "data": {
+      "servers": "content/servers",
+      "cache": "content/cache"
+    }
+  }
+}
+EOF
