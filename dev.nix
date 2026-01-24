@@ -1,39 +1,41 @@
 { pkgs, ... }: {
+  # Cấu hình kênh gói phần mềm
   channel = "stable-23.11";
 
-  # Chỉ cài đặt các gói công cụ, không tự động chạy gì cả
+  # Danh sách các gói cài đặt vào môi trường
   packages = [
-    # Công cụ hệ thống & Giải nén
     pkgs.curl
     pkgs.wget
-    pkgs.unzip
+    pkgs.unzip          # Để bạn giải nén backup
     pkgs.gnutar
     pkgs.gzip
-    
-    # Môi trường lập trình & Chạy ứng dụng
-    pkgs.nodejs_20
-    pkgs.go
-    pkgs.gcc
-    pkgs.openssh
-    
-    # Công cụ mở Port (Tunneling)
-    pkgs.cloudflared
+    pkgs.nodejs_20      # Node.js
+    pkgs.go             # Go (cần cho PufferPanel)
+    pkgs.openssh        # Để dùng Pinggy nếu cần
+    pkgs.cloudflared    # Để dùng Cloudflare Tunnel
   ];
 
+  # Cấu hình của Google IDX
   idx = {
-    # Bật tính năng Preview nếu bạn muốn xem web qua cổng 8080 của IDX
+    # Cài đặt các Extension (để trống nếu không dùng)
+    extensions = [ ];
+
+    # Quản lý các tiến trình (Đã tắt tự động theo ý bạn)
+    processes = { };
+
+    # Cấu hình xem trước (Preview)
     previews = {
       enable = true;
       previews = {
         web = {
-          command = ["sleep" "infinity"]; # Giữ preview không bị lỗi khi chưa chạy panel
+          # Cổng mặc định của PufferPanel là 8080
+          command = [ "echo" "Môi trường đã sẵn sàng. Hãy chạy panel trong Terminal!" ];
           manager = "web";
         };
       };
     };
-
-    # Không tự động chạy lệnh cài đặt hay tiến trình nào
-    onCreate = {};
+  };
+}
     processes = {};
   };
 }
