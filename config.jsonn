@@ -1,4 +1,3 @@
-cat <<EOF > ~/server/config.json
 {
   "panel": {
     "database": {
@@ -16,4 +15,3 @@ cat <<EOF > ~/server/config.json
     }
   }
 }
-EOF
